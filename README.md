@@ -27,7 +27,9 @@ This is a reference implementation on how you could implement tag-based invalida
 - set 'profile' variable to the AWS CLI profile which has necessary permissions to deploy AWS resources using CloudFormation.
 - set 'backend_endpoint' variable to the backend system which will act as 'Origin' for CloudFront. This is the backend which is emitting the tag metadata in response headers.
 
-3. Run `make all`. This would build the project and copy the assets into an S3 bucket and deploy the CloudFormation template in the AWS region set..
+3. Run `make all`. This would build the project and copy the respective artifacts into the 2 Amazon S3 bucket created and deploy the CloudFormation template in specified AWS region.
+
+Once the deployment is done, go to the [Amazon CloudFront console](https://us-east-1.console.aws.amazon.com/cloudfront/v3/home#/distributions) to view and test tag based invalidation in the newly created distribution.
 
 ## Security
 
