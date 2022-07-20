@@ -4,8 +4,13 @@ This is a reference implementation on how you could implement 'Tag-based' invali
 
 ## Architecture
 
-![Tag Ingest Workflow](/images/tag-ingest-workflow.jpg)
-![Tag Purge Workflow](/images/tag-purge-workflow.jpg)
+# Tag Ingest Workflow
+
+![Tag Ingest Workflow](/images/tag-ingest-workflow.jpeg)
+
+# Tag Purge Workflow
+
+![Tag Purge Workflow](/images/tag-purge-workflow.jpeg)
 
 ## Pre-requisites:
 
