@@ -1,0 +1,869 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Transform: AWS::Serverless-2016-10-31
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    # define parameter logical grouping
+    ParameterGroups:
+      # define the backend endpoint and
+      # whether its listening on HTTP or HTTPS
+      - Label:
+          default: Backend Configuration
+        Parameters:
+          - BackendEndpoint
+          - Encrypted
+      - Label:
+          default: Tag Configuration
+        Parameters:
+          - TagFieldName
+          - TagDelimiter
+      - Label:
+          default: Tag TTL Configuration (optional)
+        Parameters:
+          - TagTTLFieldName
+          - TagTTLPrecedence
+      - Label:
+          default: Other configs (optional)
+        Parameters:
+          - DynamoDBTablePrefix
+          - TopicNameSuffix
+          - DeployStackSetRoles
+    ParameterLabels:
+      BackendEndpoint:
+        default: Origin Endpoint
+      Encrypted:
+        default: Backend listening on https or http?
+      TagFieldName:
+        default: The response header used to identify the tags
+      TagDelimiter:
+        default: Select the delimiter when multiple tags are supplied
+      TagTTLFieldName:
+        default: The response header used to identify the Tag TTL
+      DynamoDBTablePrefix:
+        default: Enter DynamoDB table prefix
+      TopicNameSuffix:
+        default: Enter SNS topic name suffix
+      TagTTLPrecedence:
+        default: Select whether Tag TTL(defined above) or Cache-Control header takes precedence in Tag TTL calculations
+      DeployStackSetRoles:
+        default: Create the 'AWSCloudFormationStackSetExecutionRole' and 'AWSCloudFormationStackSetAdministrationRole' needed for cross region deployment of resources using StackSets
+Parameters:
+  BackendEndpoint:
+    Type: String
+  Encrypted:
+    Type: String
+    AllowedValues:
+      - https
+      - http
+    ConstraintDescription: Choose an option between https or http
+    Default: http
+  TagFieldName:
+    Type: String
+    ConstraintDescription: Enter the origin response header to look for tags
+    Default: edge-cache-tag
+  TagDelimiter:
+    Type: String
+    ConstraintDescription: Select tag delimiter
+    AllowedValues:
+      - COMMA
+      - SPACE
+    Default: COMMA
+  DynamoDBTablePrefix:
+    Type: String
+    ConstraintDescription: Enter the table prefix
+    Default: 'tags'
+  TopicNameSuffix:
+    Type: String
+    ConstraintDescription: Enter SNS topic name suffix
+    Default: 'tag-ingest-topic'
+  TagTTLFieldName:
+    Type: String
+    ConstraintDescription: Enter the origin response header to look for Tag ttl
+    Default: tag-ttl
+  TagTTLPrecedence:
+    Type: String
+    ConstraintDescription: Select whether Tag TTL header(defined above) or Cache-Control header takes precedence in Tag TTL calculations
+    AllowedValues:
+      - Tag
+      - Cache-Control
+      - None
+    Default: Tag
+  DeployStackSetRoles:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: Create the IAM roles needed for cross region StackSet deployment.
+    Default: true
+
+Conditions:
+  CreateStackSetRoles: !Equals
+    - !Ref DeployStackSetRoles
+    - true
+
+Mappings:
+  Workshop:
+    Project:
+      Name: "PROJECTNAME"
+      Version: "VERSION"
+      SourceBucket: "SOURCEBUCKET"
+    TagDelimiter:
+      COMMA: ","
+      SPACE: " "
+
+Resources:
+
+  StackSetDeploymentRole1:
+    Type: "AWS::IAM::Role"
+    Condition: CreateStackSetRoles
+    Properties:
+        RoleName: AWSCloudFormationStackSetExecutionRole
+        Path: "/"
+        ManagedPolicyArns:
+          - !Sub arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Action:
+                - "sts:AssumeRole"
+              Principal:
+                AWS:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:root
+
+  StackSetDeploymentRole2:
+    Type: "AWS::IAM::Role"
+    DependsOn: StackSetDeploymentRole1
+    Condition: CreateStackSetRoles
+    Properties:
+        RoleName: AWSCloudFormationStackSetAdministrationRole
+        Path: "/"
+        Policies:
+          -
+            PolicyName: "CustomPolicy"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                  - Effect: Allow
+                    Action:
+                      - sts:AssumeRole
+                    Resource: arn:*:iam::*:role/AWSCloudFormationStackSetExecutionRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Effect: "Allow"
+              Action:
+                - "sts:AssumeRole"
+              Principal:
+                Service:
+                  - cloudformation.amazonaws.com
+
+  TagIngestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy: !Sub |
+        { "deadLetterTargetArn" : "${DeadLetterTagIngestQueue.Arn}", "maxReceiveCount" : 10 }
+
+  DeadLetterTagIngestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  TagIngestQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - "SQS:SendMessage"
+            Effect: "Allow"
+            Resource: !GetAtt TagIngestQueue.Arn
+            Principal:
+              AWS:
+                - "*"
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:sns:*:${AWS::AccountId}:${AWS::StackName}-${AWS::Region}-${TopicNameSuffix}
+          -
+            Action:
+              - "SQS:ChangeMessageVisibility"
+              - "SQS:DeleteMessage"
+              - "SQS:ReceiveMessage"
+            Effect: "Allow"
+            Resource: !GetAtt TagIngestQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt TagIngestFunctionRole.Arn
+
+      Queues:
+        - !Ref TagIngestQueue
+
+  TagPurgeQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy: !Sub |
+        { "deadLetterTargetArn" : "${DeadLetterTagPurgeQueue.Arn}", "maxReceiveCount" : 10 }
+
+  DeadLetterTagPurgeQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  TagPurgeQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - "SQS:SendMessage"
+            Effect: "Allow"
+            Resource: !GetAtt TagPurgeQueue.Arn
+            Principal:
+              AWS: !GetAtt PurgeRequestWorkflowRole.Arn
+      Queues:
+        - !Ref TagPurgeQueue
+
+
+  TagIngestFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        S3Bucket: !FindInMap ["Workshop","Project", "SourceBucket"]
+        S3Key: !Join ["/", [!FindInMap ["Workshop","Project", "Name"],!FindInMap ["Workshop","Project", "Version"], "code/tag-ingest-table.zip"]]
+      MemorySize: 254
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt TagIngestFunctionRole.Arn
+      Timeout: 60
+      Runtime: python3.9
+      Environment:
+        Variables:
+          PROCESS_RECORD_COUNT: 10
+          SQS_QUEUE_URL: !Ref TagIngestQueue
+          TABLE_PREFIX: !Ref DynamoDBTablePrefix
+          TAG_DELIMITER: !FindInMap ["Workshop","TagDelimiter",!Ref TagDelimiter]
+          PRECEDENCE_TTL: !Ref TagTTLPrecedence
+  TagIngestFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: /service-role/
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Action:
+            - 'sts:AssumeRole'
+          Effect: "Allow"
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+      Policies:
+        - PolicyName: CustomPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'sqs:DeleteMessage'
+                  - 'sqs:ReceiveMessage'
+                  - 'sqs:GetQueueAttributes'
+                Resource: !GetAtt TagIngestQueue.Arn
+                Effect: "Allow"
+              - Action:
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:CreateTable'
+                  - 'dynamodb:DescribeTable'
+                  - 'dynamodb:DescribeTimeToLive'
+                  - 'dynamodb:UpdateTimeToLive'
+                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTablePrefix}*"
+                Effect: "Allow"
+
+  TagPurgerFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        S3Bucket: !FindInMap ["Workshop","Project", "SourceBucket"]
+        S3Key: !Join ["/", [!FindInMap ["Workshop","Project", "Name"],!FindInMap ["Workshop","Project", "Version"], "code/tag-purger.zip"]]
+      MemorySize: 254
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt TagPurgerFunctionRole.Arn
+      Timeout: 60
+      Runtime: python3.9
+      Environment:
+        Variables:
+          PROCESS_RECORD_COUNT: 10
+          INVALIDATION_THRESHOLD: 1000
+          SQS_QUEUE_URL: !Ref TagPurgeQueue
+          PURGER_ACTIVE_PARAMETER_NAME: 'purger_lambda'
+          STACK_NAME: !Sub ${AWS::StackName}
+
+  TagPurgerFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: /service-role/
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Action:
+            - 'sts:AssumeRole'
+          Effect: "Allow"
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+      Policies:
+        - PolicyName: CustomPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'sqs:DeleteMessage'
+                  - 'sqs:ReceiveMessage'
+                  - 'sqs:GetQueueAttributes'
+                Resource: !GetAtt TagPurgeQueue.Arn
+                Effect: "Allow"
+              - Action:
+                  - 'cloudfront:ListInvalidations'
+                  - 'cloudfront:GetInvalidation'
+                  - 'cloudfront:CreateInvalidation'
+                Resource: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/*
+                Effect: "Allow"
+              - Action:
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:GetParameterHistory
+                  - ssm:GetParametersByPath
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                  - ssm:DeleteParameters
+                Effect: Allow
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*"
+
+  PurgeRequestWorkflow:
+    Type: 'AWS::StepFunctions::StateMachine'
+    Properties:
+      StateMachineName: !Sub ${AWS::StackName}-PurgeRequestWorkflow
+      DefinitionString: !Sub |
+          {
+            "Comment": "Tag purger workflow",
+            "StartAt": "Each Tag",
+            "States": {
+              "Each Tag": {
+                "Type": "Map",
+                "Next": "Call Purge Function",
+                "ItemsPath": "$.tags",
+                "MaxConcurrency": 1,
+                "Iterator": {
+                  "StartAt": "Fetch Purge Urls",
+                  "States": {
+                    "Fetch Purge Urls": {
+                      "Type": "Task",
+                      "Parameters": {
+                        "TableName.$": "States.Format('tags-{}', $$.Execution.Input.distributionId)",
+                        "ExpressionAttributeValues": {
+                          ":p1": {
+                            "S.$": "$"
+                          }
+                        },
+                        "KeyConditionExpression": "tag = :p1"
+                      },
+                      "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+                      "Next": "Purge URLs"
+                    },
+                    "Purge URLs": {
+                      "Type": "Map",
+                      "ItemsPath": "$.Items",
+                      "End": true,
+                      "Iterator": {
+                        "StartAt": "Push To Purge Queue",
+                        "States": {
+                          "Push To Purge Queue": {
+                            "Type": "Task",
+                            "End": true,
+                            "Resource": "arn:aws:states:::sqs:sendMessage",
+                            "Parameters": {
+                              "MessageBody.$": "$",
+                              "MessageAttributes": {
+                                "distributionId": {
+                                  "DataType": "String",
+                                  "StringValue.$": "$$.Execution.Input.distributionId"
+                                }
+                              },
+                              "QueueUrl": "${TagPurgeQueue}"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "Call Purge Function": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::lambda:invoke",
+                "OutputPath": "$.Payload",
+                "Parameters": {
+                  "FunctionName": "${TagPurgerFunction.Arn}"
+                },
+                "Retry": [
+                  {
+                    "ErrorEquals": [
+                      "Lambda.ServiceException",
+                      "Lambda.AWSLambdaException",
+                      "Lambda.SdkClientException"
+                    ],
+                    "IntervalSeconds": 3,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                  }
+                ],
+                "End": true
+              }
+            }
+          }
+      RoleArn: !GetAtt PurgeRequestWorkflowRole.Arn
+
+  PurgeRequestWorkflowRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: /service-role/
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Action:
+            - 'sts:AssumeRole'
+          Effect: "Allow"
+          Principal:
+            Service:
+              - states.amazonaws.com
+      Policies:
+        - PolicyName: CustomPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "dynamodb:Query"
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTablePrefix}-*
+              -
+                Effect: "Allow"
+                Action:
+                  - "sqs:SendMessage"
+                Resource: !GetAtt TagPurgeQueue.Arn
+              -
+                Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt TagPurgerFunction.Arn
+
+  EdgeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+                - "edgelambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/service-role/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: CustomSNSPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - "sns:Publish"
+                Resource: !Sub arn:aws:sns:*:${AWS::AccountId}:${AWS::StackName}-${AWS::Region}-${TopicNameSuffix}
+                Effect: "Allow"
+
+  CronTagIngestScheduler:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "ScheduledRule"
+      ScheduleExpression: "rate(1 minute)"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn: !GetAtt TagIngestFunction.Arn
+          Id: "CronTagIngestScheduler"
+
+  CronTagPurgerScheduler:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "ScheduledRule"
+      ScheduleExpression: "rate(2 minutes)"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn: !GetAtt TagPurgerFunction.Arn
+          Id: "CronTagPurgerScheduler"
+
+  CronTagIngestSchedulerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TagIngestFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt CronTagIngestScheduler.Arn
+
+  CronTagPurgerSchedulerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TagPurgerFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt CronTagPurgerScheduler.Arn
+
+  InvalidationMonitorDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardBody: !Sub |
+          {
+              "widgets": [
+                  {
+                      "height": 6,
+                      "width": 12,
+                      "y": 0,
+                      "x": 12,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${TagIngestQueue.QueueName}", { "stat": "Average", "label": "IngestQueue" } ]
+                          ],
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "region": "${AWS::Region}",
+                          "liveData": false,
+                          "title": "Avg: Messages in Ingest Queue",
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "period": 300
+                      }
+                  },
+                  {
+                      "height": 6,
+                      "width": 12,
+                      "y": 0,
+                      "x": 0,
+                      "type": "metric",
+                      "properties": {
+                          "metrics": [
+                              [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${TagPurgeQueue.QueueName}", { "stat": "Average", "label": "PurgeQueue" } ]
+                          ],
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "region": "${AWS::Region}",
+                          "liveData": false,
+                          "title": "Avg: Messages in Purge Queue",
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "period": 300
+                      }
+                  }
+              ]
+          }
+
+  LambdaStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      Description: Create a Lambda@Edge function & CloudFront function in us-east-1
+      PermissionModel: SELF_MANAGED
+      Parameters:
+        - ParameterKey: EdgeLambdaRoleArn
+          ParameterValue: !GetAtt EdgeLambdaRole.Arn
+        - ParameterKey: AccountId
+          ParameterValue: !Sub ${AWS::AccountId}
+        - ParameterKey: ParentRegion
+          ParameterValue: !Sub ${AWS::Region}
+        - ParameterKey: StackName
+          ParameterValue: !Sub ${AWS::StackName}
+        - ParameterKey: ProjectName
+          ParameterValue: !FindInMap ["Workshop","Project","Name"]
+        - ParameterKey: Version
+          ParameterValue: !FindInMap ["Workshop","Project","Version"]
+        - ParameterKey: SourceBucket
+          ParameterValue: !FindInMap ["Workshop","Project","SourceBucket"]
+        - ParameterKey: BackendEndpoint
+          ParameterValue: !Ref BackendEndpoint
+        - ParameterKey: TagFieldName
+          ParameterValue: !Ref TagFieldName
+        - ParameterKey: TagTTLFieldName
+          ParameterValue: !Ref TagTTLFieldName
+        - ParameterKey: TopicName
+          ParameterValue: !Sub ${AWS::StackName}-${AWS::Region}-${TopicNameSuffix}
+        - ParameterKey: DummyParam
+          ParameterValue: !If [CreateStackSetRoles,!Ref StackSetDeploymentRole2,!Ref EdgeLambdaRole]
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Sub ${AWS::AccountId}
+          Regions:
+            - us-east-1
+      StackSetName: !Sub "${AWS::StackName}-${AWS::Region}-Lambda"
+      TemplateBody: |
+          AWSTemplateFormatVersion: 2010-09-09
+          Description: Create the backend in specified regions
+          Parameters:
+            AccountId:
+              Description: Account ID
+              Type: String
+            ParentRegion:
+              Description: AWS Region where stack is deployed
+              Type: String
+            StackName:
+              Description: Stack Name
+              Type: String
+            ProjectName:
+              Description: Project Name
+              Type: String
+            Version:
+              Description: Version
+              Type: String
+            SourceBucket:
+              Description: Source Bucket for lambda function code
+              Type: String
+            EdgeLambdaRoleArn:
+              Description: ARN of the Lambda Function
+              Type: String
+            BackendEndpoint:
+              Description: BackendEndpoint
+              Type: String
+            TagFieldName:
+              Description: Origin header field where tag is present
+              Type: String
+            TagTTLFieldName:
+              Description: Origin header field where tag ttl is present
+              Type: String
+            TopicName:
+              Description: Topic Name
+              Type: String
+            DummyParam:
+              Description: Not used. Added to build DependsOn like feature
+              Type: String
+          Resources:
+            CachePolicy:
+              Type: AWS::CloudFront::CachePolicy
+              Properties:
+                CachePolicyConfig:
+                  Name: !Sub ${AWS::StackName}-CachePolicy
+                  DefaultTTL: 86400
+                  MaxTTL: 31536000
+                  MinTTL: 0
+                  ParametersInCacheKeyAndForwardedToOrigin:
+                    EnableAcceptEncodingBrotli: true
+                    EnableAcceptEncodingGzip: true
+                    HeadersConfig:
+                      HeaderBehavior: none
+                    CookiesConfig:
+                      CookieBehavior: none
+                    QueryStringsConfig:
+                      QueryStringBehavior: whitelist
+                      QueryStrings:
+                        - 'sample'
+
+            MyDistribution:
+              Type: AWS::CloudFront::Distribution
+              Properties:
+                DistributionConfig:
+                  PriceClass: PriceClass_All
+                  HttpVersion: http2
+                  IPV6Enabled: true
+                  ViewerCertificate:
+                    CloudFrontDefaultCertificate: true
+                  Comment: !Sub ${AWS::StackName}-${ProjectName}-Tag based
+                  Enabled: 'true'
+                  Origins:
+                  - DomainName: !Ref BackendEndpoint
+                    Id: dynamicOrigin
+                    CustomOriginConfig:
+                      HTTPSPort: 80
+                      OriginProtocolPolicy: http-only
+                  DefaultCacheBehavior:
+                    TargetOriginId: dynamicOrigin
+                    CachePolicyId: !Ref CachePolicy
+                    ViewerProtocolPolicy: redirect-to-https
+                    SmoothStreaming: 'false'
+                    Compress: 'true'
+                    LambdaFunctionAssociations:
+                      - EventType: 'origin-response'
+                        LambdaFunctionARN: !Ref OriginResponseFunctionVersion
+
+            OriginResponseFunction:
+              Type: 'AWS::Lambda::Function'
+              Properties:
+                FunctionName: !Sub "${StackName}-OriginResponseFunction"
+                Handler: 'index.handler'
+                Role: !Ref EdgeLambdaRoleArn
+                Timeout: '30'
+                Runtime: 'nodejs14.x'
+                Code:
+                  ZipFile: !Sub
+                   - |
+                      var AWS = require("aws-sdk");
+                      var util = require("util");
+                      var parentRegionSNS = new AWS.SNS({ region: '${ParentRegion}'});
+                      var localRegionSNS = new AWS.SNS();
+                      var tagName = "${TagFieldName}";
+                      var tagTTL = "${TagTTLFieldName}";
+                      var topicName = "${TopicName}";
+                      var accountId = "${AccountId}";
+                      var parentRegion = "${ParentRegion}";
+                      var region = process.env.AWS_REGION;
+                      var topicArn = util.format("arn:aws:sns:%s:%s:%s",region,accountId,topicName);
+
+                      exports.handler = async (event) => {
+                          // console.log("Received event:%j", event);
+                          let response = event.Records[0].cf.response;
+                          if(response.headers[tagName]){
+                            let request = event.Records[0].cf.request;
+                            let tagPayload = {};
+                            tagPayload.distributionId = event.Records[0].cf.config.distributionId;
+                            tagPayload.querystring = request.querystring;
+                            tagPayload.uri = request.uri;
+                            tagPayload.tags = response.headers[tagName][0].value;
+                            // populate the tag ttl with explicit value from tag-ttl header
+                            // and or Cache-Control header
+                            if(response.headers[tagTTL]){
+                              tagPayload.tag_ttl = response.headers[tagTTL][0].value;
+                              delete response.headers[tagTTL];
+                            }
+                            if(response.headers['cache-control']){
+                               tagPayload.cache_ttl = parseTTL(response.headers['cache-control'][0].value);
+                            }
+                            // delete the tag header before sending back the response
+                            delete response.headers[tagName];
+                            console.log("Tag payload :%j",tagPayload);
+
+                            // emit only when ttl value > 0
+                            // if(tagPayload.ttl > 0){
+                              var params = {
+                                  Message: JSON.stringify(tagPayload),
+                                  Subject: "PostTag"+tagPayload.distributionId,
+                                  TopicArn: topicArn
+                              };
+                              try{
+                                await localRegionSNS.publish(params).promise();
+                              }
+                              catch(e){
+                                  console.log("Trying in parent region:%s",e);
+                                  params.TopicArn = topicArn = util.format("arn:aws:sns:%s:%s:%s",parentRegion,accountId,topicName);
+                                  try{
+                                    await parentRegionSNS.publish(params).promise();
+                                  }catch(e){console.log("Both REC and Parent SNS endpoints are not valid..skipping emitting of tags")}
+                              }
+                            // }
+                            // else{
+                            //   console.log("Tag TTL is '0', not emitting");
+                            // }
+                          }
+                          return response;
+                      };
+                      function parseTTL(cacheControlValue){
+                        console.log("In parseTTL :%s",cacheControlValue);
+                        let ttl = 0;
+                        if(cacheControlValue.includes("max-age") || cacheControlValue.includes("s-maxage")){
+                          // cache control header of format max-age=5, s-maxage=7, public
+                          let cacheValues = cacheControlValue.split(",");
+                          // we don't know the order in which the headers will come but
+                          // return if there's s-maxage as that takes precedence over max-age
+                          for(let i=0;i<cacheValues.length;i++){
+                            let value = cacheValues[i];
+                            if(value.includes("s-maxage")){
+                             ttl = value.split("=")[1];
+                             break;
+                            }
+                            else if(value.includes("max-age")){
+                              ttl = value.split("=")[1];
+                            }
+                          }
+                        }
+                        return ttl;
+                      };
+                   - ParentRegion: !Ref ParentRegion
+                     TagFieldName: !Ref TagFieldName
+                     TagTTLFieldName: !Ref TagTTLFieldName
+                     TopicName: !Ref TopicName
+                     AccountId: !Ref AccountId
+
+            OriginResponseFunctionVersion:
+                Type: "AWS::Lambda::Version"
+                Properties:
+                  FunctionName: !Ref OriginResponseFunction
+                  Description: "A version of OriginResponseFunction"
+
+          Outputs:
+            CloudFrontEndpoint:
+              Value: !Sub https://${MyDistribution.DomainName}/
+
+  TagInjectTopicStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      Description: Create a Lambda@Edge function & CloudFront function in us-east-1
+      PermissionModel: SELF_MANAGED
+      Parameters:
+        - ParameterKey: TagIngestQueueArn
+          ParameterValue: !GetAtt TagIngestQueue.Arn
+        - ParameterKey: TopicName
+          ParameterValue: !Sub ${AWS::StackName}-${AWS::Region}-${TopicNameSuffix}
+        - ParameterKey: DummyParam
+          ParameterValue: !If [CreateStackSetRoles,!Ref StackSetDeploymentRole2,!Ref TagIngestQueue]
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Sub ${AWS::AccountId}
+          Regions:
+            - us-east-1
+            - us-east-2
+            - us-west-1
+            - us-west-2
+            - ap-south-1
+            - ap-northeast-1
+            - ap-northeast-2
+            - ap-southeast-1
+            - ap-southeast-2
+            - eu-west-1
+            - eu-west-2
+            - eu-central-1
+            - sa-east-1
+      StackSetName: !Sub "${AWS::StackName}-${AWS::Region}-Topic"
+      TemplateBody: |
+          AWSTemplateFormatVersion: 2010-09-09
+          Description: Create the backend in specified regions
+          Parameters:
+            TagIngestQueueArn:
+              Description: Tag Ingest Queue Arn
+              Type: String
+            TopicName:
+              Description: Topic name
+              Type: String
+            DummyParam:
+              Description: Not used. Added to build DependsOn like feature
+              Type: String
+          Resources:
+            TagIngestTopic:
+              Type: AWS::SNS::Topic
+              Properties:
+                TopicName: !Ref TopicName
+                Subscription:
+                  -
+                    Endpoint: !Ref TagIngestQueueArn
+                    Protocol: 'sqs'
