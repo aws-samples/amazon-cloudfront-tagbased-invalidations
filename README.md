@@ -1,14 +1,14 @@
-## Tag based Invalidations - Amazon CloudFront
+## Tag based Invalidations in Amazon CloudFront
 
-This is a reference implementation on how you could implement 'Tag-based' invalidations in CloudFront.
+This is a reference implementation on how you could implement tag-based invalidations in CloudFront.
 
 ## Architecture
 
-# Tag Ingest Workflow
+### Tag Ingest Workflow
 
 ![Tag Ingest Workflow](/images/tag-ingest-workflow.jpeg)
 
-# Tag Purge Workflow
+### Tag Purge Workflow
 
 ![Tag Purge Workflow](/images/tag-purge-workflow.jpeg)
 
