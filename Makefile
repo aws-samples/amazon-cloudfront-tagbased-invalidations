@@ -12,15 +12,18 @@ bucket = <ENTER>
 # regions = us-east-1 ap-south-1 eu-central-1 ap-southeast-2
 # regions = us-east-2 eu-central-1
 region = <ENTER>
-region = us-east-1
-acl = public-read
-# acl = private
+# acl = public-read
+ acl = private
 # the AWS CLI profile which has necesary permissions for the deployment
 profile = <ENTER>
 # profile = <ENTER>
 backend_endpoint = <ENTER>
 
-all: clean package prepare deploy
+all: clean createbucket package prepare deploy
+
+createbucket:
+	aws s3api create-bucket --bucket $(bucket)-us-east-1 --region us-east-1
+	aws s3api create-bucket --bucket $(bucket)-$(region) --region $(region) --create-bucket-configuration LocationConstraint=$(region)
 
 package:
 	mkdir -p dist && cd lambda-functions/origin-response && zip -FS -q -r ../../dist/origin-response.zip * && cd ../../
