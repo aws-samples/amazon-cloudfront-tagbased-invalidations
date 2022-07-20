@@ -2,6 +2,10 @@
 
 This is a reference implementation on how you could implement 'Tag-based' invalidations in CloudFront.
 
+## Architecture
+
+
+
 ## Pre-requisites:
 
 1. Install 'make'.
