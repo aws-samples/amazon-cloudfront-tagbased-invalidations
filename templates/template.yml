@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SOCF07202022)-Reference recipe to implement Tag based invalidation with Amazon CloudFront
-
+  Reference recipe to implement Tag based invalidation with Amazon CloudFront (1t9uc46o4)
 Transform: AWS::Serverless-2016-10-31
 
 Metadata:

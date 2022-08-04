@@ -22,7 +22,7 @@ This is a reference implementation on how you could implement tag-based invalida
 1. Clone this repository using command `git clone https://github.com/aws-samples/amazon-cloudfront-tagbased-invalidations.git`
 
 2. In the 'Makefile'
-- set 'bucket' variable to the Amazon S3 bucket name prefix which will be used to create 2 Amazon S3 buckets. One of the bucket is created in the specified region below and other bucket is created in 'us-east-1' region. These buckets will hold the build artifacts for the corresponding AWS regional resource being deployed.
+- set 'bucket' variable to the Amazon S3 bucket name prefix which will be used to create 2 Amazon S3 buckets. One of the bucket is created in the specified 'region' parameter and other bucket is created in 'us-east-1' region. These buckets will hold the build artifacts for the corresponding AWS regional resource being deployed.
 - set 'region' variable to the AWS Region where you want the deployed solution to reside.
 - set 'profile' variable to the AWS CLI profile which has necessary permissions to deploy AWS resources using CloudFormation.
 - set 'backend_endpoint' variable to the backend system which will act as 'Origin' for CloudFront. This is the backend which is emitting the tag metadata in response headers.
