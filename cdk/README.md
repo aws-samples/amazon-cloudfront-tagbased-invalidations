@@ -1,14 +1,24 @@
-# Welcome to your CDK TypeScript project
+## Tag based Invalidations in Amazon CloudFront
 
-This is a blank project for CDK development with TypeScript.
+This is a reference implementation on how you could implement tag-based invalidations in CloudFront using CDK.
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Architecture
 
-## Useful commands
+### Tag Ingest Workflow
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `cdk deploy`      deploy this stack to your default AWS account/region
-* `cdk diff`        compare deployed stack with current state
-* `cdk synth`       emits the synthesized CloudFormation template
+![Tag Ingest Workflow](/images/tag-ingest-workflow.jpeg)
+
+### Tag Purge Workflow
+
+![Tag Purge Workflow](/images/tag-purge-workflow.jpeg)
+
+## Pre-requisites
+
+1. Install [CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
+1. Install [NPM](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+
+## Steps to build
+
+1. Clone the repository and change into `cdk` directory.
+1. Set the environment variables in env.sh
+1. Run ./deploy.sh

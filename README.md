@@ -1,6 +1,6 @@
 ## Tag based Invalidations in Amazon CloudFront
 
-This is a reference implementation on how you could implement tag-based invalidations in CloudFront.
+This is a reference implementation on how you could implement tag-based invalidations in CloudFront using CloudFormation template.
 
 ## Architecture
 
