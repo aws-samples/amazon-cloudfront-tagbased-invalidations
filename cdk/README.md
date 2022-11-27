@@ -20,7 +20,7 @@ This is a reference implementation on how you could implement tag-based invalida
 ## Steps to build
 
 1. Clone the repository and change into `cdk` directory.
-1. Set the environment variables in env.sh
+1. Set below environment variables in env.sh
 ```
 # Required: set the AWS CLI profile name
 export AWS_PROFILE="default"
@@ -40,4 +40,4 @@ export TAG_TTL_DEFINED_BY='Cache-Control'
 # deploy a sample application that consists of CloudFront + Lambda Function as origin
 export SAMPLE_APP_SETUP='True'
 ```
-1. Run ./deploy.sh
+3. Run ./deploy.sh
