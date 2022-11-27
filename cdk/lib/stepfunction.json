@@ -1,0 +1,77 @@
+{
+    "Comment": "Tag purger workflow",
+    "StartAt": "Each Tag",
+    "States": {
+        "Each Tag": {
+            "Type": "Map",
+            "Next": "Call Purge Function",
+            "ItemsPath": "$.tags",
+            "MaxConcurrency": 1,
+            "Iterator": {
+                "StartAt": "Fetch Purge Urls",
+                "States": {
+                    "Fetch Purge Urls": {
+                        "Type": "Task",
+                        "Parameters": {
+                            "TableName.$": "States.Format('${StackName}-{}', $$.Execution.Input.distributionId)",
+                            "ExpressionAttributeValues": {
+                                ":p1": {
+                                    "S.$": "$"
+                                }
+                            },
+                            "KeyConditionExpression": "tag = :p1"
+                        },
+                        "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+                        "Next": "Purge URLs"
+                    },
+                    "Purge URLs": {
+                        "Type": "Map",
+                        "ItemsPath": "$.Items",
+                        "End": true,
+                        "Iterator": {
+                            "StartAt": "Push To Purge Queue",
+                            "States": {
+                                "Push To Purge Queue": {
+                                    "Type": "Task",
+                                    "End": true,
+                                    "Resource": "arn:aws:states:::sqs:sendMessage",
+                                    "Parameters": {
+                                        "MessageBody.$": "$",
+                                        "MessageAttributes": {
+                                            "distributionId": {
+                                                "DataType": "String",
+                                                "StringValue.$": "$$.Execution.Input.distributionId"
+                                            }
+                                        },
+                                        "QueueUrl": "${TagPurgeQueue}"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "Call Purge Function": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "OutputPath": "$.Payload",
+            "Parameters": {
+                "FunctionName": "${TagPurgerFunctionArn}"
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException"
+                    ],
+                    "IntervalSeconds": 3,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                }
+            ],
+            "End": true
+        }
+    }
+}
