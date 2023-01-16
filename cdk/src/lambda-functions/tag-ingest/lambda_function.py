@@ -11,7 +11,7 @@ sqs = boto3.client('sqs')
 queue_url = os.environ['SQS_QUEUE_URL']
 process_record_count = int(os.environ['PROCESS_RECORD_COUNT'])
 tag_delimiter = os.environ['TAG_DELIMITER']
-precedence = os.environ['TAG_TTL_DEFINED_BY']
+precedence = os.environ['PRECEDENCE_TTL']
 dynamodb = boto3.resource('dynamodb')
 
 log = logging.getLogger()
@@ -53,6 +53,7 @@ def updateTable(payload):
         table = checkCreateTable(payload["distributionId"])
 
         tags = payload["tags"].split(tag_delimiter)
+        log.info("Found tags")
         tag_ttl = determineTagTTL(payload)
         log.info("Tag ttl :%s",tag_ttl)
 
@@ -61,7 +62,7 @@ def updateTable(payload):
 
         for tag in tags:
             tag = tag.strip()
-            log.info(f"Updating item for tag ${tag}")
+            log.info(f"Updating item for tag {tag}")
 
             hash = {"p" : payload["uri"], "u": payload["querystring"]}
             hash = json.dumps(hash, sort_keys = True).encode("utf-8")
@@ -97,15 +98,15 @@ def determineTagTTL(payload):
 
     if precedence == "None":
         ttl = None
-    elif precedence == "Tag":
-        if "cache_ttl" in payload:
-            ttl = payload["cache_ttl"]
-        if "tag_ttl" in payload:
-            ttl = payload["tag_ttl"]
     elif precedence == "Cache-Control":
-        if "tag_ttl" in payload:
+        if payload["cache_ttl"]:
+            ttl = payload["cache_ttl"]
+        elif payload["tag_ttl"]:
             ttl = payload["tag_ttl"]
-        if "cache_ttl" in payload:
+    elif precedence == "Tag":
+        if payload["tag_ttl"]:
+            ttl = payload["tag_ttl"]
+        elif payload["cache_ttl"]:
             ttl = payload["cache_ttl"]
     return ttl
 
