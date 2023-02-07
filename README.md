@@ -59,17 +59,17 @@ export SAMPLE_APP_SETUP='True'
 
 ### AWS Service wise calculations
 
-| Lambda@Edge Pricing (compute+request)	| $27.00 |
+| [Lambda@Edge Pricing](https://aws.amazon.com/lambda/pricing/)	| $27.00 |
 | --- | --- |
 | Number of invocations	| 20,000,000 |	
 | Compute price per 128MB-second (USD) | $0.00000625125	|
 | Function execution duration (ms)|	120ms |	
 | Total compute seconds	| 2,400,000 GBsec |	
 | Request cost per million Lambda@Edge invocations (USD) | $0.60 |
-| ***Compute cost*** |	$15.00 |
-| ***Request cost***	|	$12.00 |
+| ***Compute cost (USD)*** |	$15.00 |
+| ***Request cost (USD)***	|	$12.00 |
 
-| SNS Pricing |		$0.34 |
+| [SNS Pricing](https://aws.amazon.com/sns/pricing/) |		$0.34 |
 | --- | --- |
 | Number of SNS requests |	20,000,000 |	
 | Cost per million requests (USD) |	$0.00 (No charge for deliveries to SQS)|	
@@ -80,14 +80,14 @@ export SAMPLE_APP_SETUP='True'
 | ***Total Data transfer cost (GB)***	| $0.34 |
 
 
-| SQS Pricing |		$7.60 |
+| [SQS Pricing](https://aws.amazon.com/sqs/pricing/) |		$7.60 |
 | --- | --- |
 | Number of SQS requests |	20,000,000 |	
 | Cost per million requests (USD) |	$0.40 (First million requests free per month)|	
 | Data transfer cost to Lambda (GB)	 |	$0.00 |
 | ***Request cost (USD)*** | 	$7.60 |
 
-| DynamoDB Pricing |	$75.01 |
+| [DynamoDB Pricing](https://aws.amazon.com/dynamodb/pricing/on-demand/) |	$75.01 |
 | --- | --- |
 | Number of items in table	| 60,000,000	|
 | Average size per item (Bytes)	| 400 Bytes |	
@@ -101,25 +101,37 @@ export SAMPLE_APP_SETUP='True'
 | Cost per read request (USD)	| $0.00000025| 	
 | ***Read cost (USD)*** |		$0.01 | 
 
-| EventBridge scheduler (Ingest+Purge)	|	$0.04 | 
+| [EventBridge Pricing](https://aws.amazon.com/eventbridge/pricing/)	|	$0.04 | 
 | --- | --- |
 | Custom events per month (Ingest/2 min interval) |	21600 |	
 | Custom events per month (Purge/2min interval) |	21600 |
 | Cost per million custom events (USD)	| $1.00 | 	
-| Scheduler cost |		$0.04 |
+| Scheduler cost (USD) |		$0.04 |
 
 | Ingest/Purge Lambda cost	|	$0.01 |
 | --- | --- |
 | Number of invocations (Ingest@2 min interval) |	21600 |	
-| Avg  function  duration in ms (Ingest) | 1240 |	
+| Avg  function  duration in ms (Ingest) | 1240 (Assume 50ms with empty queue and 6000ms with queue) |	
 | Number of invocations (Purge@2 min interval) |	21600 |	
-| Avg  function  duration in ms (Purge)	| 701 |	
+| Avg  function  duration in ms (Purge)	| 701 (Assume 250ms with empty queue and 10000ms with queue) |	
 | Total GB-seconds (w/254MB function memory) |	10,402 |	
-| Compute cost  per GB-second (USD)	| $0.0000166667	|
+| Compute cost  per GB-second (USD)	| $0.0000166667	(First 400,000 GB-s free per month)|
 | Total compute cost (USD)	|	$0.00 |
 | Request cost per million requests (USD) |	$0.20 |	
-| Total request cost (USD)	|	$0.01 |
-| Ephemeral storage cost 512MB (USD) |	$0.00 |
+| Ephemeral storage cost 512MB (USD) |	$0.00 (Included for each function)|
+| ***Total request cost (USD)***	|	$0.01 |
+
+| [CloudFront Invalidation Pricing](https://aws.amazon.com/cloudfront/pricing/)	|	$95.00 |
+| --- | --- |
+| Number of URL invalidations| 20,000	|
+| Cost per invalidation path |	$0.005 |	
+| ***Invalidation cost (USD)***	|	$95.00 |
+
+| [StepFunctions Pricing](https://aws.amazon.com/step-functions/pricing/)	|	$0.50 |
+| --- | --- |
+| Number of state transitions	| 24,000	|
+| Cost per 1000 state transition | $0.025 |
+| ***Total Workflow cost*** |		$0.50 |
 
 ## Security
 
