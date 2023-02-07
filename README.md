@@ -45,7 +45,8 @@ export SAMPLE_APP_SETUP='True'
 
 ## Pricing Calculations
 
-| Assumptions | Parameters |
+### Assumptions
+| Assumption | Parameters |
 | --- | --- |
 | ***Traffic***  |  |
 | CloudFront requests per month | 100,000,000  |
@@ -55,6 +56,70 @@ export SAMPLE_APP_SETUP='True'
 | Tags per URL                  | 3                      |
 | Tag invalidations per month   | 1000                   |
 | URLs per cache tag            | 20                     |
+
+### AWS Service wise calculations
+
+| Lambda@Edge Pricing (compute+request)	| $27.00 |
+| --- | --- |
+| Number of invocations	| 20,000,000 |	
+| Compute price per 128MB-second (USD) | $0.00000625125	|
+| Function execution duration (ms)|	120ms |	
+| Total compute seconds	| 2,400,000 GBsec |	
+| Request cost per million Lambda@Edge invocations (USD) | $0.60 |
+| ***Compute cost*** |	$15.00 |
+| ***Request cost***	|	$12.00 |
+
+| SNS Pricing |		$0.34 |
+| --- | --- |
+| Number of SNS requests |	20,000,000 |	
+| Cost per million requests (USD) |	$0.00 (No charge for deliveries to SQS)|	
+| Request cost (USD)	|	$0.00 |
+| Payload size (Bytes)	| 200 |	
+| Data transfer to SQS (GB)	| 3.725290298 |	
+| Data transfer cost per GB (USD) |	$0.09 |	
+| ***Total Data transfer cost (GB)***	| $0.34 |
+
+
+| SQS Pricing |		$7.60 |
+| --- | --- |
+| Number of SQS requests |	20,000,000 |	
+| Cost per million requests (USD) |	$0.40 (First million requests free per month)|	
+| Data transfer cost to Lambda (GB)	 |	$0.00 |
+| ***Request cost (USD)*** | 	$7.60 |
+
+| DynamoDB Pricing |	$75.01 |
+| --- | --- |
+| Number of items in table	| 60,000,000	|
+| Average size per item (Bytes)	| 400 Bytes |	
+| Storage volume (GB) |	22.35174179	|
+| Storage cost per GB (USD)	| $0.25 (First 25 GB free)|	
+| Storage cost (USD)	|	$0.00 | 
+| Number of writes	| 60,000,000 | 	
+| Cost per million write request (USD) | $1.25000000 |	
+| ***Write cost (USD)***	| 	$75.00 | 
+| Number of reads	| 20,000 | 	
+| Cost per read request (USD)	| $0.00000025| 	
+| ***Read cost (USD)*** |		$0.01 | 
+
+| EventBridge scheduler (Ingest+Purge)	|	$0.04 | 
+| --- | --- |
+| Custom events per month (Ingest/2 min interval) |	21600 |	
+| Custom events per month (Purge/2min interval) |	21600 |
+| Cost per million custom events (USD)	| $1.00 | 	
+| Scheduler cost |		$0.04 |
+
+| Ingest/Purge Lambda cost	|	$0.01 |
+| --- | --- |
+| Number of invocations (Ingest@2 min interval) |	21600 |	
+| Avg  function  duration in ms (Ingest) | 1240 |	
+| Number of invocations (Purge@2 min interval) |	21600 |	
+| Avg  function  duration in ms (Purge)	| 701 |	
+| Total GB-seconds (w/254MB function memory) |	10,402 |	
+| Compute cost  per GB-second (USD)	| $0.0000166667	|
+| Total compute cost (USD)	|	$0.00 |
+| Request cost per million requests (USD) |	$0.20 |	
+| Total request cost (USD)	|	$0.01 |
+| Ephemeral storage cost 512MB (USD) |	$0.00 |
 
 ## Security
 
