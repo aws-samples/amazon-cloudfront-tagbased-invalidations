@@ -45,14 +45,13 @@ export SAMPLE_APP_SETUP='True'
 
 ## Pricing Calculations
 
-|Assumptions/Parameters|---|
-
-| ***Traffic***    | --- |
-| CloudFront requests per month | 100,000,000            |
-| Cache Hit Ratio               | 80%                    |
-| Origin requests per month     | 20,000,000             |
-
-| ***Tag volume***      | ---|
+| Assumptions | Parameters |
+| --- | --- |
+| ***Traffic***  |  |
+| CloudFront requests per month | 100,000,000  |
+| Cache Hit Ratio | 80%  |
+| Origin requests per month  | 20,000,000  |
+| ***Tag volume***      |  |
 | Tags per URL                  | 3                      |
 | Tag invalidations per month   | 1000                   |
 | URLs per cache tag            | 20                     |
