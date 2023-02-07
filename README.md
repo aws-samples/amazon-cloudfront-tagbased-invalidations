@@ -1,6 +1,6 @@
 ## Tag based Invalidations in Amazon CloudFront
 
-This is a reference implementation on how you could implement tag-based invalidations in CloudFront using CloudFormation template.
+This is a reference implementation on how you could implement tag-based invalidations in CloudFront using CDK.
 
 ## Architecture
 
@@ -12,24 +12,36 @@ This is a reference implementation on how you could implement tag-based invalida
 
 ![Tag Purge Workflow](/images/tag-purge-workflow.jpeg)
 
-## Pre-requisites:
+## Pre-requisites
 
-1. Install 'make'.
-1. Install git.
+1. Install [CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
+1. Install [NPM](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
 
 ## Steps to build
 
-1. Clone this repository using command `git clone https://github.com/aws-samples/amazon-cloudfront-tagbased-invalidations.git`
+1. Clone this repository and change into `cdk` directory.
+1. Set below environment variables in env.sh
+```
+# Required: set the AWS CLI profile name
+export AWS_PROFILE="default"
+# Optional: set the SNS topic name
+export TOPIC_NAME='tag-ingest-topic'
+# Required: set the AWS region where the primary deployment of solution resides.
+export PRIMARY_AWS_REGION='us-west-1'
+# Required: Specify delimiter when multiple tags are passed, possible values ',' or ' ' (space)
+export TAG_DELIMITER=','
+# Required: Specify the response header name where tags are present
+export TAG_NAME='Edge-Cache-Tag'
+# Optional: Specify how to determine the TTL of the Tag reocord in DynamoDB.
+# whether to use Cache-Control header max-age or take the TTL specified as part of the tag
+# leave it empty if you do not want to set a TTL 
+# possible values 'Tag' or 'Cache-Control' or ''
+export TAG_TTL_DEFINED_BY='Cache-Control'
+# deploy a sample application that consists of CloudFront + Lambda Function as origin
+export SAMPLE_APP_SETUP='True'
+```
+3. Run ./deploy.sh
 
-2. In the 'Makefile'
-- set 'bucket' variable to the Amazon S3 bucket name prefix which will be used to create 2 Amazon S3 buckets. One of the bucket is created in the specified 'region' parameter and other bucket is created in 'us-east-1' region. These buckets will hold the build artifacts for the corresponding AWS regional resource being deployed.
-- set 'region' variable to the AWS Region where you want the deployed solution to reside.
-- set 'profile' variable to the AWS CLI profile which has necessary permissions to deploy AWS resources using CloudFormation.
-- set 'backend_endpoint' variable to the backend system which will act as 'Origin' for CloudFront. This is the backend which is emitting the tag metadata in response headers.
-
-3. Run `make all`. This would build the project and copy the respective artifacts into the 2 Amazon S3 bucket created and deploy the CloudFormation template in specified AWS region.
-
-Once the deployment is done, go to the [Amazon CloudFront console](https://us-east-1.console.aws.amazon.com/cloudfront/v3/home#/distributions) to view and test tag based invalidation in the newly created distribution.
 
 ## Security
 
