@@ -57,7 +57,18 @@ export SAMPLE_APP_SETUP='True'
 | Tag invalidations per month   | 1000                   |
 | URLs per cache tag            | 20                     |
 
-### AWS Service wise calculations
+| Total Cost	| $205.50 |
+| --- | --- |
+| Lambda@Edge |	$27.00 |
+| SNS |	$0.34 |
+| SQS	| $7.60 |
+| DynamoDB	| $75.01 |
+| EventBridge Scheduler |	$0.04 |
+| AWS Lambda |	$0.01 |
+| CloudFront Invalidations |	$95.00 |
+| StepFunctions |	$0.50 |
+
+### AWS Service wise break up of calculations
 
 | [Lambda@Edge Pricing](https://aws.amazon.com/lambda/pricing/)	| $27.00 |
 | --- | --- |
