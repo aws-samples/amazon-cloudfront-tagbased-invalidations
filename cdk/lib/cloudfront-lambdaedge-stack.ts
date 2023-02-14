@@ -24,6 +24,7 @@ export class CloudFrontLambdaEdgeStack extends cdk.Stack {
         functionCode = functionCode.replace("${TopicName}", topicName);
         functionCode = functionCode.replace("${AccountId}", Stack.of(this).account);
         functionCode = functionCode.replace("${ParentRegion}", props.primaryRegion!);
+        functionCode = functionCode.replace("${TagTTLFieldName}", props.tagTTLName);
 
         // 👇 Create IAM Permission Policy for oResFunction
         let oResFunctionPolicyStmt = new iam.PolicyStatement({
@@ -57,61 +58,10 @@ export class CloudFrontLambdaEdgeStack extends cdk.Stack {
             code: new lambda.InlineCode(functionCode),
         });
 
+        new CfnOutput(this, 'OriginResponseLambda@Edge', {
+            value: oResFunction.functionArn,
+            description: "Lambda@Edge function that needs to associated to Origin Response on CloudFront behavior where tag based invalidation is required."
+        });
         // oResFunction.addToRolePolicy(oResFunctionPolicy);
-
-        if (props?.sampleAppSetup) {
-
-            let cachePolicy = new cloudfront.CachePolicy(this, util.format("%s%s", prefix, "CachePolicy"), {
-                queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList('sample'),
-                enableAcceptEncodingBrotli: true,
-                enableAcceptEncodingGzip: true,
-                minTtl: Duration.seconds(0),
-                maxTtl: Duration.seconds(31536000),
-                defaultTtl: Duration.seconds(86400),
-            });
-
-            let functionCode = fs.readFileSync(path.join(__dirname, '../src/lambda-functions/backend-origin/index.js'), "utf8");
-            functionCode = functionCode.replace("${TagFieldName}", props.tagName!);
-
-            let backendFunction = new lambda.Function(this, util.format("%s%s", prefix, "BackendFunction"), {
-                runtime: lambda.Runtime.NODEJS_18_X,
-                memorySize: 128,
-                timeout: Duration.seconds(10),
-                handler: 'index.handler',
-                code: new lambda.InlineCode(functionCode),
-            });
-
-            let functionURL = backendFunction.addFunctionUrl({
-                authType: lambda.FunctionUrlAuthType.NONE,
-                cors: {
-                    allowedOrigins: ['*'],
-                    allowedHeaders: ['*'],
-                    allowedMethods: [lambda.HttpMethod.GET]
-                },
-            });
-
-            let httpOrigin = new origins.HttpOrigin(cdk.Fn.select(2, cdk.Fn.split("/", functionURL.url)));
-
-            let distribution = new cloudfront.Distribution(this, util.format("%s%s", prefix, "CloudFront"), {
-                defaultBehavior: {
-                    origin: httpOrigin,
-                    cachePolicy: cachePolicy,
-                    edgeLambdas: [
-                        {
-                            functionVersion: oResFunction.currentVersion,
-                            eventType: cloudfront.LambdaEdgeEventType.ORIGIN_RESPONSE,
-                        }
-                    ],
-                },
-                httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-                comment: util.format("%s_%s_%s", Stack.of(this).stackName, Stack.of(this).region, "Description"),
-            });
-
-            // 👇 export CloudFront distribution
-            new CfnOutput(this, `${Stack.of(this).stackName} - Distribution`, {
-                value: `https://${distribution.distributionDomainName}/`,
-                description: 'CloudFront distribution',
-            });
-        }
     }
 }

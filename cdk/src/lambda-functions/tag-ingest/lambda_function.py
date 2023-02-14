@@ -99,9 +99,9 @@ def determineTagTTL(payload):
     if precedence == "None":
         ttl = None
     elif precedence == "Cache-Control":
-        if payload["cache_ttl"]:
+        if "cache_ttl" in payload:
             ttl = payload["cache_ttl"]
-        elif payload["tag_ttl"]:
+        elif "tag_ttl" in payload:
             ttl = payload["tag_ttl"]
     elif precedence == "Tag":
         if payload["tag_ttl"]:

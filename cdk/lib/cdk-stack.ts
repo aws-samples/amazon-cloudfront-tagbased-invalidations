@@ -18,10 +18,10 @@ export interface CloudFrontTagBasedInvalidationProps extends StackProps {
   primaryRegion?: string;
   tagInvalidationStackName?: string;
   topicName?: string;
-  sampleAppSetup?: boolean;
   tagTTLDefinedBy?: string;
   tagDemiliter?: string;
   tagName?: string;
+  tagTTLName: string;
 }
 
 export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
@@ -121,6 +121,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
         TABLE_PREFIX: Stack.of(this).stackName,
         TAG_DELIMITER: props.tagDemiliter!,
         TAG_TTL_DEFINED_BY: props.tagTTLDefinedBy!,
+        PRECEDENCE_TTL: props.tagTTLDefinedBy!,
       },
     });
 

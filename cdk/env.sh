@@ -10,6 +10,9 @@ export PRIMARY_AWS_REGION='us-west-1'
 export TAG_DELIMITER=','
 # Required: Specify the response header name where tags are present
 export TAG_NAME='Edge-Cache-Tag'
+# Optional: Specify the response header name where tag Time-to-Live (TTL) in seconds 
+# will be specified from origin.
+export TAG_TTL_NAME='tag-ttl'
 # Optional: Specify how to determine the TTL of the Tag reocord in DynamoDB.
 # whether to use Cache-Control header max-age or take the TTL specified as part of the tag
 # leave it empty if you do not want to set a TTL 
