@@ -100,7 +100,7 @@ def determineTagTTL(payload):
         ttl = None
     elif precedence == "Cache-Control":
         if "cache_ttl" in payload:
-            ttl = payload["cache_ttl"]
+            ttl = parseTTL(payload["cache_ttl"])
         elif "tag_ttl" in payload:
             ttl = payload["tag_ttl"]
     elif precedence == "Tag":
@@ -110,6 +110,27 @@ def determineTagTTL(payload):
             ttl = payload["cache_ttl"]
     return ttl
 
+def parseTTL(cacheControlValue='none'):
+    log.info(f"In parseTTL :{cacheControlValue}")
+    ttl = 0
+    
+    cacheControlValue = cacheControlValue.lower()
+
+    if "max-age" in cacheControlValue or "s-maxage" in cacheControlValue:
+        # cache control header of format max-age=5, s-maxage=7, public
+        cacheValues = cacheControlValue.split(",")
+        # we don't know the order in which the headers will come from origin but
+        # return if there's s-maxage as that takes precedence over max-age for caching
+        for i in range(len(cacheValues)):
+            value = cacheValues[i]
+            if "s-maxage" in value:
+                ttl = value.split("=")[1]
+                break
+            elif "max-age" in value:
+                ttl = value.split("=")[1]
+    log.info(f"Output parsedTTL :{ttl}")
+    return ttl
+  
 def checkCreateTable(distributionId):
     log.info("In checkCreateTable %s %s",os.environ['TABLE_PREFIX'],distributionId)
     table_name = "{}-{}".format(os.environ['TABLE_PREFIX'],distributionId)

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
-import { CloudFrontTagBasedInvalidationProps, CloudFrontTagBasedInvalidationStack } from '../lib/cdk-stack';
-import { CloudFrontLambdaEdgeStack } from '../lib/cloudfront-lambdaedge-stack';
-import { CloudFrontTagBasedInvalidationSNSTopicStack } from '../lib/snstopic-stack';
+import { PrimaryStackProps, PrimaryStack } from '../lib/primary-stack';
+import { LambdaEdgeStack } from '../lib/lambdaedge-stack';
+import { RegionalStack } from '../lib/regional-stack';
 
 const props = {
-  // terminationProtection: true,
+  terminationProtection: true,
   env: { account: process.env.CDK_DEPLOY_ACCOUNT || process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEPLOY_REGION || process.env.CDK_DEFAULT_REGION },
   profile: process.env.AWS_PROFILE!,
   topicName: process.env.TOPIC_NAME,
@@ -15,14 +15,15 @@ const props = {
   tagName: process.env.TAG_NAME,
   tagTTLName: process.env.TAG_TTL_NAME,
   description: "Reference recipe to implement Tag based invalidation with Amazon CloudFront (1t9uc46o4)",
-} as CloudFrontTagBasedInvalidationProps;
+} as PrimaryStackProps;
 
 const app = new cdk.App();
-const tagInvalidationStack = new CloudFrontTagBasedInvalidationStack(app, 'TagInvalidationPrimaryStack1', props);
+const primaryStack = new PrimaryStack(app, 'TagPrimaryStack', props);
 const props1 = {
   ...props,
-  tagInvalidationStackName: tagInvalidationStack.stackName,
+  tagInvalidationStackName: primaryStack.stackName,
 }
-const topicStack = new CloudFrontTagBasedInvalidationSNSTopicStack(app, 'TagInvalidationRegionalStack1', props1);
 
-const cloudFrontLambdaEdgeStack = new CloudFrontLambdaEdgeStack(app, 'TagInvalidationEdgeFunctionsStack1', props1);
+new RegionalStack(app, 'TagRegionalStack', props1);
+
+new LambdaEdgeStack(app, 'TagLambdaEdgeStack', props1);

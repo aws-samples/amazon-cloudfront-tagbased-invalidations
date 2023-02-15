@@ -1,19 +1,16 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { CloudFrontTagBasedInvalidationProps } from './cdk-stack';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { PrimaryStack, PrimaryStackProps } from './primary-stack';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { Fn, Duration, Stack, CfnOutput } from 'aws-cdk-lib';
-import { Asset } from 'aws-cdk-lib/aws-s3-assets';
 import * as path from 'path';
 import * as util from "util";
-import { ALBConstruct } from './ALBConstruct';
 import fs = require('fs');
 import * as iam from 'aws-cdk-lib/aws-iam';
 
-export class CloudFrontLambdaEdgeStack extends cdk.Stack {
-    constructor(scope: Construct, id: string, props: CloudFrontTagBasedInvalidationProps) {
+export class LambdaEdgeStack extends cdk.Stack {
+    constructor(scope: Construct, id: string, props: PrimaryStackProps) {
         super(scope, id, props);
         let prefix = 'Global';
         let topicName = util.format("%s-%s", props?.tagInvalidationStackName, props?.topicName);
@@ -39,7 +36,7 @@ export class CloudFrontLambdaEdgeStack extends cdk.Stack {
         });
 
         // 👇 Create IAM Permission Role for oResFunction
-        let oResFunctionRole = new iam.Role(this, util.format("%s%s", prefix, "oResFunctionRole"), {
+        let oResFunctionRole = new iam.Role(this, "OriginResponseFunctionRole", {
             assumedBy: new iam.ServicePrincipal('edgelambda.amazonaws.com'),
             inlinePolicies: {
                 customPolicy: oResFunctionPolicy,
@@ -50,10 +47,12 @@ export class CloudFrontLambdaEdgeStack extends cdk.Stack {
                 ),]
         });
 
-        let oResFunction = new cloudfront.experimental.EdgeFunction(this, util.format("%s%s", prefix, 'oResFunction'), {
-            runtime: lambda.Runtime.NODEJS_16_X,
+        let oResFunction = new cloudfront.experimental.EdgeFunction(this, 'OriginResponseFunction', {
+            runtime: lambda.Runtime.NODEJS_18_X,
             handler: 'index.handler',
+            memorySize: 180,
             // role: oResFunctionRole,
+            timeout: Duration.seconds(30),
             initialPolicy: [oResFunctionPolicyStmt],
             code: new lambda.InlineCode(functionCode),
         });
@@ -62,6 +61,5 @@ export class CloudFrontLambdaEdgeStack extends cdk.Stack {
             value: oResFunction.functionArn,
             description: "Lambda@Edge function that needs to associated to Origin Response on CloudFront behavior where tag based invalidation is required."
         });
-        // oResFunction.addToRolePolicy(oResFunctionPolicy);
     }
 }

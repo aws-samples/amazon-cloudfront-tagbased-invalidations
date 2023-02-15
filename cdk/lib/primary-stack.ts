@@ -8,12 +8,11 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
 import * as util from "util";
 import { CfnStateMachine } from 'aws-cdk-lib/aws-stepfunctions';
-import { Asset } from 'aws-cdk-lib/aws-s3-assets';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { Rule, Schedule } from 'aws-cdk-lib/aws-events';
 import fs = require('fs');
 
-export interface CloudFrontTagBasedInvalidationProps extends StackProps {
+export interface PrimaryStackProps extends StackProps {
   profile?: string;
   primaryRegion?: string;
   tagInvalidationStackName?: string;
@@ -24,9 +23,9 @@ export interface CloudFrontTagBasedInvalidationProps extends StackProps {
   tagTTLName: string;
 }
 
-export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
+export class PrimaryStack extends cdk.Stack {
 
-  constructor(scope: Construct, id: string, props: CloudFrontTagBasedInvalidationProps) {
+  constructor(scope: Construct, id: string, props: PrimaryStackProps) {
     super(scope, id, props);
     let prefix = 'Primary';
 
@@ -36,7 +35,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
     });
 
     let ingestQueue = new sqs.Queue(this,
-      util.format("%s%s", prefix, "IngestQueue"), {
+      "IngestQueue", {
       visibilityTimeout: Duration.seconds(60),
       retentionPeriod: Duration.seconds(1209600),
       deadLetterQueue: {
@@ -108,12 +107,13 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
     ingestQueue.addToResourcePolicy(sqsPolicy1);
     ingestQueue.addToResourcePolicy(sqsPolicy2);
 
-    let tagIngestFunction = new lambda.Function(this, util.format("%s%s", prefix, "IngestFunction"), {
+    let tagIngestFunction = new lambda.Function(this, "IngestFunction", {
       runtime: lambda.Runtime.PYTHON_3_9,
       memorySize: 254,
       role: tagIngestFunctionRole,
       timeout: cdk.Duration.seconds(60),
       handler: 'lambda_function.lambda_handler',
+      architecture: lambda.Architecture.ARM_64,
       code: lambda.Code.fromAsset(path.join(__dirname, '../src/lambda-functions/tag-ingest/')),
       environment: {
         PROCESS_RECORD_COUNT: cdk.numberToCloudFormation("10"),
@@ -129,7 +129,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
     ingestQueue.grantPurge(tagIngestFunction);
     ingestQueue.grantSendMessages(tagIngestFunction);
 
-    new Rule(this, util.format("%s%s", prefix, "IngestScheduler"), {
+    new Rule(this, "IngestScheduler", {
       schedule: Schedule.rate(cdk.Duration.minutes(1)),
       targets: [new targets.LambdaFunction(tagIngestFunction)],
     });
@@ -140,7 +140,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
       Stack.of(this).region,
       "ingestQueueArn");
 
-    new ssm.StringParameter(this, util.format("%s%s", prefix, "IngestQueueSSM"), {
+    new ssm.StringParameter(this, "IngestQueueSSM", {
       parameterName,
       stringValue: ingestQueue.queueArn,
     });
@@ -156,11 +156,11 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
     //   stringValue: ingestQueueDLQ.queueArn,
     // });
 
-    let purgeQueueDLQ = new sqs.Queue(this, util.format("%s%s", prefix, "PurgeQueueDLQ"), {
+    let purgeQueueDLQ = new sqs.Queue(this, "PurgeQueueDLQ", {
       retentionPeriod: Duration.seconds(1209600),
     });
 
-    let purgeQueue = new sqs.Queue(this, util.format("%s%s", prefix, "PurgeQueue"), {
+    let purgeQueue = new sqs.Queue(this, "PurgeQueue", {
       visibilityTimeout: Duration.seconds(60),
       retentionPeriod: Duration.seconds(1209600),
       deadLetterQueue: {
@@ -222,11 +222,12 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
         ),]
     });
 
-    let tagPurgerFunction = new lambda.Function(this, util.format("%s%s", prefix, "PurgerFunction"), {
+    let tagPurgerFunction = new lambda.Function(this, "PurgerFunction", {
       runtime: lambda.Runtime.PYTHON_3_9,
       memorySize: 254,
       role: tagPurgerFunctionRole,
       timeout: cdk.Duration.seconds(60),
+      architecture: lambda.Architecture.ARM_64,
       handler: 'lambda_function.lambda_handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../src/lambda-functions/tag-purger/')),
       environment: {
@@ -238,7 +239,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
       },
     });
 
-    new Rule(this, util.format("%s%s", prefix, "PurgerScheduler"), {
+    new Rule(this, "PurgerScheduler", {
       schedule: Schedule.rate(cdk.Duration.minutes(2)),
       targets: [new targets.LambdaFunction(tagPurgerFunction)],
     });
@@ -264,7 +265,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
     });
 
     // 👇 Create IAM Permission Role for TagIngestFunction
-    let stateFunctionRole = new iam.Role(this, util.format("%s%s", prefix, "PurgeWorkflowRole"), {
+    let stateFunctionRole = new iam.Role(this, "PurgeWorkflowRole", {
       assumedBy: new iam.ServicePrincipal('states.amazonaws.com'),
       inlinePolicies: {
         customPolicy: stateFunctionPolicy,
@@ -289,7 +290,7 @@ export class CloudFrontTagBasedInvalidationStack extends cdk.Stack {
     stepFunctionDefinition = stepFunctionDefinition.replace("${TagPurgeQueue}", purgeQueue.queueUrl);
     stepFunctionDefinition = stepFunctionDefinition.replace("${TagPurgerFunctionArn}", tagPurgerFunction.functionArn);
 
-    let tagPurgeWorkflow = new CfnStateMachine(this, util.format("%s%s", prefix, "PurgeWorkflow"), {
+    let tagPurgeWorkflow = new CfnStateMachine(this, "PurgeWorkflow", {
       definitionString: stepFunctionDefinition,
       stateMachineName: util.format("%s%s", Stack.of(this).stackName, "PurgeWorkflow"),
       roleArn: stateFunctionRole.roleArn
