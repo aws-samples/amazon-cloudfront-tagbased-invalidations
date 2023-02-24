@@ -145,6 +145,8 @@ export TAG_TTL_DEFINED_BY='Cache-Control'
 | Cost per 1000 state transition | $0.025 |
 | ***Total Workflow cost*** |		$0.50 |
 
+## Troubleshooting
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
