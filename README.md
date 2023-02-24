@@ -40,8 +40,6 @@ export TAG_TTL_NAME='tag-ttl'
 # leave it empty if you do not want to set a TTL 
 # possible values 'Tag' or 'Cache-Control' or ''
 export TAG_TTL_DEFINED_BY='Cache-Control'
-# deploy a sample application that consists of CloudFront + Lambda Function as origin
-export SAMPLE_APP_SETUP='True'
 ```
 3. Run ./deploy.sh
 

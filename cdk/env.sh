@@ -7,7 +7,7 @@ export AWS_PROFILE="default"
 export TOPIC_NAME='tag-ingest-topic'
 
 # Required: set the AWS region where the primary deployment of solution resides.
-export PRIMARY_AWS_REGION='us-west-1'
+export PRIMARY_AWS_REGION=''
 
 # Required: Specify delimiter when multiple tags are passed, possible values ',' or ' ' (space)
 export TAG_DELIMITER=','
@@ -24,6 +24,3 @@ export TAG_TTL_NAME='tag-ttl'
 # leave it empty if you do not want to set a TTL 
 # possible values 'Tag' or 'Cache-Control' or ''
 export TAG_TTL_DEFINED_BY='Cache-Control'
-
-# deploy a sample application that consists of CloudFront + Lambda Function as origin
-export SAMPLE_APP_SETUP='True'
