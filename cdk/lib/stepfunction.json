@@ -1,22 +1,30 @@
 {
-    "Comment": "Tag purger workflow",
+    "Comment": "Tag purger workflow-v2",
     "StartAt": "Each Tag",
     "States": {
         "Each Tag": {
             "Type": "Map",
             "Next": "Call Purge Function",
             "ItemsPath": "$.tags",
-            "MaxConcurrency": 1,
-            "Iterator": {
+            "ItemSelector": {
+                "distributionId.$": "$$.Execution.Input.distributionId",
+                "tag.$": "$$.Map.Item.Value"
+            },
+            "MaxConcurrency": 1000,
+            "ItemProcessor": {
+                "ProcessorConfig": {
+                    "Mode": "DISTRIBUTED",
+                    "ExecutionType": "STANDARD"
+                },
                 "StartAt": "Fetch Purge Urls",
                 "States": {
                     "Fetch Purge Urls": {
                         "Type": "Task",
                         "Parameters": {
-                            "TableName.$": "States.Format('${StackName}-{}', $$.Execution.Input.distributionId)",
+                            "TableName.$": "States.Format('TagPrimaryStack-{}', $.distributionId)",
                             "ExpressionAttributeValues": {
                                 ":p1": {
-                                    "S.$": "$"
+                                    "S.$": "$.tag"
                                 }
                             },
                             "KeyConditionExpression": "tag = :p1"
@@ -43,7 +51,7 @@
                                                 "StringValue.$": "$$.Execution.Input.distributionId"
                                             }
                                         },
-                                        "QueueUrl": "${TagPurgeQueue}"
+                                        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/444603092185/TagPrimaryStack-PurgeQueueDB15AA5E-xGgEHSxj4nSu"
                                     }
                                 }
                             }

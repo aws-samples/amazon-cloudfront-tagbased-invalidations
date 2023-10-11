@@ -7,7 +7,7 @@ export AWS_PROFILE="default"
 export TOPIC_NAME='tag-ingest-topic'
 
 # Required: set the AWS region where the primary deployment of solution resides.
-export PRIMARY_AWS_REGION=''
+export PRIMARY_AWS_REGION='us-east-1'
 
 # Required: Specify delimiter when multiple tags are passed, possible values ',' or ' ' (space)
 export TAG_DELIMITER=','

@@ -290,10 +290,22 @@ export class PrimaryStack extends cdk.Stack {
     stepFunctionDefinition = stepFunctionDefinition.replace("${TagPurgeQueue}", purgeQueue.queueUrl);
     stepFunctionDefinition = stepFunctionDefinition.replace("${TagPurgerFunctionArn}", tagPurgerFunction.functionArn);
 
+    let tagPurgerWorkflowName = util.format("%s%s", Stack.of(this).stackName, "PurgeWorkflow");
     let tagPurgeWorkflow = new CfnStateMachine(this, "PurgeWorkflow", {
       definitionString: stepFunctionDefinition,
-      stateMachineName: util.format("%s%s", Stack.of(this).stackName, "PurgeWorkflow"),
+      stateMachineName: tagPurgerWorkflowName,
       roleArn: stateFunctionRole.roleArn
     });
+
+    stateFunctionRole.addToPolicy(new iam.PolicyStatement({
+      resources: [tagPurgeWorkflow.attrArn],
+      actions: ['states:StartExecution'],
+    }));
+    stateFunctionRole.addToPolicy(new iam.PolicyStatement({
+      resources: [
+        util.format("arn:aws:states:%s:%s:execution:%s:*", Stack.of(this).region, Stack.of(this).account, tagPurgerWorkflowName)],
+      actions: ["states:DescribeExecution",
+        "states:StopExecution"],
+    }));
   }
 }
